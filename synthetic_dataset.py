@@ -133,3 +133,16 @@ def generate_synthetic_data_leakage(
     y = np.array([np.random.choice(J, p=p_i[i]) for i in range(n)]) + 1  # Labels from 1 to J
 
     return X, c, c_hat, y
+
+# EXAMPLE:
+
+# # Generate synthetic data
+# n = 1000   # Number of observations
+# d = 50     # Number of features
+# k = 10     # Number of concepts
+# J = 5      # Number of target classes
+# b = 20     # Number of features used in ground truth concepts (ensure k < b < d - k - l)
+# l = 10     # Number of features excluded from leakage (ensure k < d - b - l)
+
+# # Generate data
+# X, c, c_hat, y = generate_synthetic_data_leakage(n, d, k, J, b, l, seed=42)
