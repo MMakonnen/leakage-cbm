@@ -134,7 +134,7 @@ def generate_synthetic_data_leakage(
 
     return X, c, c_hat, y
 
-# EXAMPLE:
+# EXAMPLE FUNCTION USAGE:
 
 # # Generate synthetic data
 # n = 1000   # Number of observations
