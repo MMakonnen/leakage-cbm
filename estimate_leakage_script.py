@@ -3,10 +3,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
+import random
+import numpy as np
 
 from synthetic_dataset import generate_synthetic_data_leakage
 from models import SimpleMLP
-from utils import train_model
+from utils import train_model, evaluate_model
 from calibration import TemperatureScaler
 
 
@@ -14,7 +16,14 @@ from calibration import TemperatureScaler
 # parameters
 ###################
 
+# ensure reproducibility (set random seeds)
 seed = 42
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+# torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = False
+
 
 # synthetic data parameters
 n = 1000   # Number of observations
@@ -69,13 +78,15 @@ y_test_tensor = torch.LongTensor(y_test).to(device)
 
 
 # Create DataLoader for training, validation (calibration), and testing
+data_loader_seed = torch.Generator()
+data_loader_seed.manual_seed(seed)
 
 # Dataset and DataLoader for g_b (predicting y from c)
 train_dataset_gb = TensorDataset(c_train_tensor, y_train_tensor)
 val_dataset_gb = TensorDataset(c_val_tensor, y_val_tensor)
 test_dataset_gb = TensorDataset(c_test_tensor, y_test_tensor)
 
-train_loader_gb = DataLoader(train_dataset_gb, batch_size=batch_size, shuffle=True)
+train_loader_gb = DataLoader(train_dataset_gb, batch_size=batch_size, shuffle=True, generator=data_loader_seed)
 val_loader_gb = DataLoader(val_dataset_gb, batch_size=batch_size, shuffle=False)
 test_loader_gb = DataLoader(test_dataset_gb, batch_size=batch_size, shuffle=False)
 
@@ -89,7 +100,7 @@ train_dataset_ga = TensorDataset(c_hat_c_train_tensor, y_train_tensor)
 val_dataset_ga = TensorDataset(c_hat_c_val_tensor, y_val_tensor)
 test_dataset_ga = TensorDataset(c_hat_c_test_tensor, y_test_tensor)
 
-train_loader_ga = DataLoader(train_dataset_ga, batch_size=batch_size, shuffle=True)
+train_loader_ga = DataLoader(train_dataset_ga, batch_size=batch_size, shuffle=True, generator=data_loader_seed)
 val_loader_ga = DataLoader(val_dataset_ga, batch_size=batch_size, shuffle=False)
 test_loader_ga = DataLoader(test_dataset_ga, batch_size=batch_size, shuffle=False)
 
@@ -99,6 +110,7 @@ input_dim_gb = c_train_tensor.shape[1]
 input_dim_ga = c_hat_c_train_tensor.shape[1]
 num_classes = J  # Number of classes
 
+torch.manual_seed(seed)
 model_gb = SimpleMLP(input_dim=input_dim_gb, num_classes=num_classes).to(device)
 model_ga = SimpleMLP(input_dim=input_dim_ga, num_classes=num_classes).to(device)
 
@@ -156,3 +168,28 @@ with torch.no_grad():
 # Optimize temperature
 temperature_scaler_ga.set_temperature(val_logits_ga, val_labels_ga)
 print(f"Optimal temperature for g_a: {temperature_scaler_ga.temperature.item():.4f}")
+
+
+# Evaluate models and compute negative log-likelihoods
+print("\nEvaluating g_b on test data...")
+test_loss_gb, test_acc_gb, avg_nll_gb = evaluate_model(
+    model_gb, temperature_scaler_gb, criterion, test_loader_gb
+)
+print(f"Test Loss: {test_loss_gb:.4f}, Accuracy: {test_acc_gb:.4f}, Avg NLL: {avg_nll_gb:.4f}")
+
+print("\nEvaluating g_a on test data...")
+test_loss_ga, test_acc_ga, avg_nll_ga = evaluate_model(
+    model_ga, temperature_scaler_ga, criterion, test_loader_ga
+)
+print(f"Test Loss: {test_loss_ga:.4f}, Accuracy: {test_acc_ga:.4f}, Avg NLL: {avg_nll_ga:.4f}")
+
+# Compute the estimated entropies
+H_y_given_c = avg_nll_gb  # H(y | c)
+H_y_given_z_c = avg_nll_ga  # H(y | z, c)
+
+# Compute the leakage measure
+leakage_estimate = H_y_given_c - H_y_given_z_c
+
+print(f"\nEstimated H(y | c): {H_y_given_c:.4f}")
+print(f"Estimated H(y | z, c): {H_y_given_z_c:.4f}")
+print(f"Estimated Leakage I(z; y | c): {leakage_estimate:.4f}")
