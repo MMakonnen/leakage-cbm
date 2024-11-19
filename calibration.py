@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.optim as optim
 
 # Temperature scaling class
 class TemperatureScaler(nn.Module):
