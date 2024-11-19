@@ -1,4 +1,6 @@
 import torch
+import torch.nn as nn
+import numpy as np
 
 # Function to train DL model
 def train_model(model, optimizer, criterion, data_loader):
