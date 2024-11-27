@@ -27,3 +27,24 @@ class TemperatureScaler(nn.Module):
             return loss
 
         optimizer.step(eval)
+
+
+# ...
+def calibrate_model(model, val_loader, criterion, device):
+    temperature_scaler = TemperatureScaler().to(device)
+    # Collect logits and labels from validation set
+    model.eval()
+    with torch.no_grad():
+        logits_list = []
+        labels_list = []
+        for inputs, labels in val_loader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            logits = model(inputs)
+            logits_list.append(logits)
+            labels_list.append(labels)
+        val_logits = torch.cat(logits_list)
+        val_labels = torch.cat(labels_list)
+    # Optimize temperature
+    temperature_scaler.set_temperature(val_logits, val_labels)
+    return temperature_scaler
