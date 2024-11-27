@@ -31,7 +31,7 @@ d = 50     # Number of features
 k = 10     # Number of concepts
 J = 5      # Number of target classes
 b = 20     # Number of features used in ground truth concepts (ensure k < b < d - k - l)
-l = 10     # Number of features excluded from leakage (ensure k < d - b - l)
+l = 5     # Number of features excluded from leakage (ensure k < d - b - l)
 
 # DL model training parameters
 batch_size = 64
