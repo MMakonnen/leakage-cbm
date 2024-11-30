@@ -7,12 +7,12 @@ import torch.nn as nn
 import torch.optim as optim
 
 # Import your custom modules (assumed to be provided)
-from synthetic_dataset import generate_synthetic_data_leakage
-from models import SimpleMLP
-from utils import split_data, train_model, evaluate_model, set_random_seeds, prepare_data_loaders
-from calibration import TemperatureScaler, calibrate_model
-from data_prep import split_data, prepare_data_loaders
-from train_eval import train_model_generic, evaluate_model
+from data.synthetic_dataset import generate_synthetic_data_leakage
+from models.mlp import SimpleMLP
+from utils import set_random_seeds
+from calibration.calibration import TemperatureScaler, calibrate_model
+from data.data_prep import split_data, prepare_data_loaders
+from train_and_eval.train_eval import train_model_generic, evaluate_model
 
 
 def main():
@@ -25,7 +25,7 @@ def main():
     }
 
     # Central Seed for Reproducibility
-    base_seed = 42  # You can set this to any integer
+    base_seed = 111  # You can set this to any integer
     seed_rng = random.Random(base_seed)  # Random generator for seeds
 
     # Device setting (set it here centrally)
@@ -205,18 +205,10 @@ def run_experiment(params, device):
 def average_results(simulation_results):
     # Parameters that are consistent across runs (excluding 'seed')
     param_keys = [
-        'n',
-        'd',
-        'k',
-        'J',
-        'b',
-        'l',
-        'batch_size',
-        'num_epochs',
-        'train_size',
-        'val_size',
-        'test_size',
-        'num_simulations',
+        'n', 'd', 'k', 'J', 'b', 'l',
+        'batch_size', 'num_epochs',
+        'train_size', 'val_size', 'test_size',
+        'num_simulations'
     ]
     params = {k: simulation_results[0][k] for k in param_keys}
     # Metrics to average
@@ -224,15 +216,12 @@ def average_results(simulation_results):
     averaged_metrics = {}
     for key in metrics_keys:
         values = [res[key] for res in simulation_results]
-        if key == 'seeds':
-            # Collect all seeds from simulation runs
-            averaged_metrics[key] = values
-        else:
-            averaged_metrics[key] = np.mean(values)
+        averaged_metrics[key] = np.mean(values)
     # Combine parameters and averaged_metrics
     averaged_result = params.copy()
     averaged_result.update(averaged_metrics)
     return averaged_result
+
 
 
 
