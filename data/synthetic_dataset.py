@@ -43,11 +43,19 @@ def generate_synthetic_data_leakage(
     if seed is not None:
         np.random.seed(seed)
 
-    # Check constraints
-    assert k < b < d - k - l, "Parameters must satisfy k < b < d - k - l"
+
+    # dimensionality warning
+    if k > b:
+        print("Warning: Dimensionality of the concept embedding (k) exceeds the number of features being projected (b). "
+            "In this case, the data will effectively lie in a b-dimensional subspace within the k-dimensional space")
+    if k > d - b - l:
+        print("Warning: Dimensionality of the concept embedding (k) exceeds the number of features being projected (d-b-l). "
+            "In this case, the data will effectively lie in a (d-b-l)-dimensional subspace within the k-dimensional space")
 
     # Ensure that sizes are appropriate
-    assert d >= b + l + 1, "d must be at least b + l + 1"
+    if d < b:
+        raise ValueError("Invalid parameter configuration: b has to be smaller (/equal to) d")
+    
 
     # Set default values for mean and covariance matrices if not provided
     if mu_x is None:
