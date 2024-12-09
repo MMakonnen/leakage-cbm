@@ -75,6 +75,14 @@ def gen_experiment_par_grid():
                                 'model_type': model_type,
                                 'noise_level': noise
                             })
+
+                            # Add condition checks before appending:
+                            # Check constraints:
+                            # Ensure k < b and k < (d - b - l)
+                            if not (k < b_val and k < (d - b_val - l_val)):
+                                # If conditions are not met, skip this configuration
+                                continue
+                            
                             param_grid.append(exp_params)
 
     return param_grid
