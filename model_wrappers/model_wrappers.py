@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 # Import the TemperatureScaler from calibration.py
-from FINAL_CODE.calibration.calibration import TemperatureScaler
+from calibration.calibration import TemperatureScaler
 
 
 

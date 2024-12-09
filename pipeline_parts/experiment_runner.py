@@ -1,8 +1,8 @@
-from FINAL_CODE.utils.utils import set_random_seeds
-from FINAL_CODE.data.synthetic_data_gen import generate_synthetic_data_leakage
-from FINAL_CODE.data.data_prep import split_data, prepare_data_loaders
-from FINAL_CODE.pipeline_parts.model_initial import initialize_models
-from FINAL_CODE.pipeline_parts.eval import evaluate_model
+from utils.utils import set_random_seeds
+from data.synthetic_data_gen import generate_synthetic_data_leakage
+from data.data_prep import split_data, prepare_data_loaders
+from pipeline_parts.model_initial import initialize_models
+from pipeline_parts.eval import evaluate_model
 
 def run_experiment(params, device):
     seed = params['seed']

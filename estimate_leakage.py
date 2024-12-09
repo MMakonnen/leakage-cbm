@@ -3,9 +3,9 @@ import random
 import torch
 import pandas as pd
 
-from FINAL_CODE.pipeline_parts.gen_experiment_grid import gen_experiment_par_grid
-from FINAL_CODE.pipeline_parts.experiment_runner import run_experiment
-from FINAL_CODE.pipeline_parts.eval import average_results
+from pipeline_parts.gen_experiment_grid import gen_experiment_par_grid
+from pipeline_parts.experiment_runner import run_experiment
+from pipeline_parts.eval import average_results
 
 
 def main():

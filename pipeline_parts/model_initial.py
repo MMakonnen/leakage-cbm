@@ -4,8 +4,8 @@ import torch.optim as optim
 from sklearn.ensemble import RandomForestClassifier
 import lightgbm as lgb
 
-from FINAL_CODE.models.simple_mlp import SimpleMLP
-from FINAL_CODE.model_wrappers.model_wrappers import PyTorchModelWrapper, SklearnModelWrapper, LightGBMModelWrapper
+from models.simple_mlp import SimpleMLP
+from model_wrappers.model_wrappers import PyTorchModelWrapper, SklearnModelWrapper, LightGBMModelWrapper
 
 def initialize_models(c_train, c_hat_train, J, seed, device, model_type="mlp"):
     torch.manual_seed(seed)
