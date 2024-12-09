@@ -25,7 +25,7 @@ def gen_experiment_par_grid():
     # Fixed parameters
     base_params = {
         'J': 5,
-        'num_simulations': 50,
+        'num_simulations': 10,
         'train_size': 0.7,
         'val_size': 0.15,
         'test_size': 0.15,
@@ -38,7 +38,7 @@ def gen_experiment_par_grid():
     noise_levels = [0.5, 2.0]        # diagonal noise constants
     feature_ratios = [1/10, 1/50]    # d = feature_ratio * n
     concept_ratios = [1/2, 1/5]      # k = concept_ratio * d
-    model_types = ['mlp', 'random_forest', 'xgboost']
+    model_types = ['random_forest']#['mlp', 'random_forest', 'xgboost']
 
     # Leakage variation: 
     # For stage 1: 
