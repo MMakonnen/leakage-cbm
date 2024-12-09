@@ -21,7 +21,7 @@ def run_experiment(params, device, max_tries=10):
     test_size = params['test_size']
     model_type = params.get('model_type', 'mlp')
 
-    set_random_seeds(seed)
+    set_random_seeds(seed) 
 
     # We will try up to max_tries times to get a dataset 
     # that includes at least one sample of each class in the training set.
