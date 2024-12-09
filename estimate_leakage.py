@@ -1,16 +1,19 @@
-
 import random
 import torch
 import pandas as pd
+from tqdm import tqdm
+# import wandb
 
 from pipeline_parts.gen_experiment_grid import gen_experiment_par_grid
 from pipeline_parts.experiment_runner import run_experiment
 from pipeline_parts.eval import average_results
 
-
 def main():
-    
-    # wandb.init(project='my_leakage_estimation_project')
+
+    # # Initialize W&B run
+    # wandb.init(project='my_leakage_estimation_project', config={
+    #     "description": "Experiment with progress bars and W&B logging"
+    # })
     
     param_grid = gen_experiment_par_grid()
     results = []
@@ -18,18 +21,25 @@ def main():
     seed_rng = random.Random(base_seed)
     device = torch.device('cpu') # or else 'cuda' (torch.cuda.is_available()) or 'mps' (torch.mps.is_available())
 
-    for params in param_grid:
+    print(f"Number of configurations: {len(param_grid)}")
+    # Wrap param_grid in tqdm to track progress over configurations
+    for config_idx, params in enumerate(tqdm(param_grid, desc="Configurations")):
         total_size = params['train_size'] + params['val_size'] + params['test_size']
         assert abs(total_size - 1.0) < 1e-6
+
         simulation_results = []
-        for sim_run in range(params['num_simulations']):
+
+        # Progress bar for simulations per configuration
+        num_sims = params['num_simulations']
+        for sim_run in tqdm(range(num_sims), desc=f"Simulations for config {config_idx+1}/{len(param_grid)}", leave=False):
             params_run = params.copy()
             seed = seed_rng.randint(0, 1_000_000)
             params_run['seed'] = seed
+
             result = run_experiment(params_run, device)
             simulation_results.append(result)
 
-            # # Log each simulation result
+            # # Log each simulation result to W&B
             # wandb.log({
             #     "model_type": params['model_type'],
             #     "n": params['n'],
@@ -50,7 +60,7 @@ def main():
         averaged_result = average_results(simulation_results)
         results.append(averaged_result)
 
-        # # Log averaged results
+        # # Log averaged results to W&B
         # wandb.log({
         #     "model_type_avg": params['model_type'],
         #     "avg_test_loss_gb": averaged_result['test_loss_gb'],
@@ -66,7 +76,11 @@ def main():
     results_df = pd.DataFrame(results)
     print("\nAll experiments completed. Final Averaged Results:")
     print(results_df)
+
+    # # Log final results DataFrame as a W&B artifact or table
     # wandb.log({"final_results": wandb.Table(dataframe=results_df)})
+
+    # # Finish W&B run
     # wandb.finish()
 
 if __name__ == "__main__":
