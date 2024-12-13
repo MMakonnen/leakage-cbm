@@ -4,9 +4,9 @@ import pandas as pd
 from tqdm import tqdm
 # import wandb
 
-from pipeline_parts.gen_experiment_grid import gen_experiment_par_grid
-from pipeline_parts.experiment_runner import run_experiment
-from pipeline_parts.eval import average_results
+from simulation_modules.gen_experiment_grid import gen_experiment_par_grid
+from simulation_modules.experiment_runner import run_experiment
+from simulation_modules.eval import average_results
 
 def main():
 
@@ -15,6 +15,7 @@ def main():
     #     "description": "Experiment with progress bars and W&B logging"
     # })
     
+    # Generate parameter configurations to test measure for and initialize seed for reproducibility
     param_grid = gen_experiment_par_grid()
     results = []
     base_seed = 42
@@ -22,14 +23,17 @@ def main():
     device = torch.device('cpu') # or else 'cuda' (torch.cuda.is_available()) or 'mps' (torch.mps.is_available())
 
     print(f"Number of configurations: {len(param_grid)}")
-    # Wrap param_grid in tqdm to track progress over configurations
+
+    # Iterate through each parameter configuration
     for config_idx, params in enumerate(tqdm(param_grid, desc="Configurations")):
+        
+        # sanity check, data splits add up to 1
         total_size = params['train_size'] + params['val_size'] + params['test_size']
         assert abs(total_size - 1.0) < 1e-6
 
         simulation_results = []
 
-        # Progress bar for simulations per configuration
+        # Run multiple simulations per configuration
         num_sims = params['num_simulations']
         for sim_run in tqdm(range(num_sims), desc=f"Simulations for config {config_idx+1}/{len(param_grid)}", leave=False):
             params_run = params.copy()
@@ -57,6 +61,7 @@ def main():
             #     "simulation_run": sim_run + 1
             # })
 
+        # Aggregate results across all simulations for this configuration
         averaged_result = average_results(simulation_results)
         results.append(averaged_result)
 
@@ -73,6 +78,7 @@ def main():
         #     "num_simulations": averaged_result['num_simulations']
         # })
 
+    # Compile results into a DataFrame for inspection
     results_df = pd.DataFrame(results)
     print("\nAll experiments completed. Final Averaged Results:")
     print(results_df)
