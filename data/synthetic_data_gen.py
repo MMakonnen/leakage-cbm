@@ -31,7 +31,7 @@ def generate_synthetic_data_leakage(
     - X (ndarray): Feature matrix (n, d).
     - c (ndarray): Ground truth concepts (n, k).
     - c_hat (ndarray): Estimated concepts (n, k).
-    - y (ndarray): Target labels (n,).
+    - y (ndarray): Target labels (n,). (zero-based indexing)
     """
     if seed is not None:
         np.random.seed(seed)  # Ensure reproducibility
@@ -84,7 +84,7 @@ def generate_synthetic_data_leakage(
     p_i = np.exp(logits_p - logits_p.max(axis=1, keepdims=True))
     p_i /= p_i.sum(axis=1, keepdims=True)  # Softmax probabilities
 
-    # Sample target labels
-    y = np.array([np.random.choice(J, p=p_i[i]) for i in range(n)]) + 1
+    # Sample target labels (zero-based indexing)
+    y = np.array([np.random.choice(J, p=p_i[i]) for i in range(n)])
 
     return X, c, c_hat, y

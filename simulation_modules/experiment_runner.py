@@ -51,7 +51,6 @@ def run_experiment(params, device, max_tries=10):
             sigma_y=sigma_y,
             seed=seed
         )
-        y_zero_based = y - 1  # Convert labels to zero-based indexing
 
         # Split data into train, validation, and test sets
         (X_train, X_val, X_test,
