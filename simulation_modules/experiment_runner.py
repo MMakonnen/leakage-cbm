@@ -12,27 +12,48 @@ def run_experiment(params, device, max_tries=10):
 
     Parameters:
     - params: Dictionary of experimental parameters.
-    - device: Device to use ('cpu' or 'cuda').
-    - max_tries: Maximum attempts to generate a dataset with all classes in the training set.
+    - device: Computation device ('cpu' or 'cuda').
+    - max_tries: Maximum attempts to generate a valid dataset.
 
     Returns:
     - result: Dictionary containing evaluation metrics and leakage estimate.
     """
+    # Extract parameters
     seed = params['seed']
     n, d, k, J, b, l = params['n'], params['d'], params['k'], params['J'], params['b'], params['l']
     batch_size, num_epochs = params['batch_size'], params['num_epochs']
     train_size, val_size, test_size = params['train_size'], params['val_size'], params['test_size']
     model_type = params.get('model_type', 'mlp')
+    noise_level = params['noise_level']
 
+    # Set random seed for reproducibility
     set_random_seeds(seed)
 
-    # Attempt to generate a valid dataset with all classes in the training set
+    # Define covariance matrices for noise
+    sigma_x = noise_level * np.eye(d)
+    sigma_c = noise_level * np.eye(k)
+    sigma_c_hat = noise_level * np.eye(k)
+    sigma_y = noise_level * np.eye(J)
+
+    # Attempt to generate a dataset with all classes in the training set
     for attempt in range(max_tries):
         # Generate synthetic data
-        X, c, c_hat, y = generate_synthetic_data_leakage(n, d, k, J, b, l, seed=seed)
+        X, c, c_hat, y = generate_synthetic_data_leakage(
+            n=n,
+            d=d,
+            k=k,
+            J=J,
+            b=b,
+            l=l,
+            sigma_x=sigma_x,
+            sigma_c=sigma_c,
+            sigma_c_hat=sigma_c_hat,
+            sigma_y=sigma_y,
+            seed=seed
+        )
         y_zero_based = y - 1  # Convert labels to zero-based indexing
 
-        # Split data into training, validation, and test sets
+        # Split data into train, validation, and test sets
         (X_train, X_val, X_test,
          c_train, c_val, c_test,
          c_hat_train, c_hat_val, c_hat_test,
@@ -44,18 +65,17 @@ def run_experiment(params, device, max_tries=10):
         all_classes_present = all(c in class_counts for c in range(J))
 
         if all_classes_present:
-            # A suitable dataset has been generated
-            break
+            break  # Valid dataset generated
         else:
             # Update seed and try again
             seed += 1
             set_random_seeds(seed)
     else:
-        # If all attempts fail, skip this configuration
+        # If attempts fail, skip this configuration
         print(f"Skipping configuration {params} as we couldn't get all classes in the training set after {max_tries} tries.")
         return None
 
-    # Prepare data loaders for training, validation, and testing
+    # Prepare DataLoaders
     (train_loader_gb, val_loader_gb, test_loader_gb,
      train_loader_ga, val_loader_ga, test_loader_ga) = prepare_data_loaders(
         c_train, c_val, c_test,
@@ -67,23 +87,23 @@ def run_experiment(params, device, max_tries=10):
     # Initialize models and loss function
     model_gb, model_ga, criterion = initialize_models(c_train, c_hat_train, J, seed, device, model_type)
 
-    # Train models with the specified number of epochs
+    # Train models
     epoch_param = num_epochs if model_type == 'mlp' else None
     model_gb.fit(train_loader_gb, num_epochs=epoch_param)
     model_ga.fit(train_loader_ga, num_epochs=epoch_param)
 
-    # Calibrate models on the validation set
+    # Calibrate models
     model_gb.calibrate(val_loader_gb)
     model_ga.calibrate(val_loader_ga)
 
-    # Evaluate models on the test set
+    # Evaluate models
     test_loss_gb, test_acc_gb, avg_nll_gb = evaluate_model(model_gb, test_loader_gb, criterion, device)
     test_loss_ga, test_acc_ga, avg_nll_ga = evaluate_model(model_ga, test_loader_ga, criterion, device)
 
-    # Compute the leakage estimate as the difference in average NLL
+    # Compute leakage estimate
     leakage_estimate = avg_nll_gb - avg_nll_ga
 
-    # Compile results into a dictionary
+    # Compile results
     result = params.copy()
     result.update({
         'test_loss_gb': test_loss_gb,

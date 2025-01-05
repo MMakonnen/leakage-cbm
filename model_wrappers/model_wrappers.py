@@ -1,12 +1,8 @@
-# Base classes and wrappers to ensure a common interface for model functionality (fit, predict_proba, calibrate)
-
 import torch
 import numpy as np
+from calibration.calibration import TemperatureScaler  # Import for model calibration
 
-# Import the TemperatureScaler module for model calibration
-from calibration.calibration import TemperatureScaler
-
-# Base wrapper class for models, defines common interface
+# Base class defining a common interface for models
 class BaseModelWrapper:
     def fit(self, train_loader, num_epochs=None):
         raise NotImplementedError("Subclasses must implement this method.")
@@ -29,7 +25,9 @@ class PyTorchModelWrapper(BaseModelWrapper):
         self.temperature_scaler = None
 
     def fit(self, train_loader, num_epochs=20):
-        # Train the PyTorch model
+        """
+        Trains the PyTorch model.
+        """
         self.model.train()
         for epoch in range(num_epochs):
             for inputs, labels in train_loader:
@@ -41,7 +39,9 @@ class PyTorchModelWrapper(BaseModelWrapper):
                 self.optimizer.step()
 
     def predict_proba(self, data_loader):
-        # Predict probabilities using the model
+        """
+        Predicts probabilities using the model.
+        """
         self.model.eval()
         if self.temperature_scaler:
             self.temperature_scaler.eval()
@@ -57,7 +57,9 @@ class PyTorchModelWrapper(BaseModelWrapper):
         return np.vstack(all_probs)
 
     def calibrate(self, val_loader):
-        # Calibrate the model using temperature scaling
+        """
+        Calibrates the model using temperature scaling.
+        """
         self.temperature_scaler = TemperatureScaler().to(self.device)
         self.model.eval()
         logits_list = []
@@ -82,7 +84,9 @@ class SklearnModelWrapper(BaseModelWrapper):
         self.temperature_scaler = None
 
     def fit(self, train_loader, num_epochs=None):
-        # Train the Scikit-learn model
+        """
+        Trains the Scikit-learn model.
+        """
         X_list, y_list = [], []
         for inputs, labels in train_loader:
             X_list.append(inputs.cpu().numpy())
@@ -92,7 +96,9 @@ class SklearnModelWrapper(BaseModelWrapper):
         self.model.fit(X_train, y_train)
 
     def predict_proba(self, data_loader):
-        # Predict probabilities using the model
+        """
+        Predicts probabilities using the model.
+        """
         X_list = []
         for inputs, _ in data_loader:
             X_list.append(inputs.cpu().numpy())
@@ -114,7 +120,9 @@ class SklearnModelWrapper(BaseModelWrapper):
         return probs
 
     def calibrate(self, val_loader):
-        # Calibrate the model using temperature scaling
+        """
+        Calibrates the model using temperature scaling.
+        """
         X_list, y_list = [], []
         for inputs, labels in val_loader:
             X_list.append(inputs.cpu().numpy())
@@ -123,8 +131,6 @@ class SklearnModelWrapper(BaseModelWrapper):
         y_val = np.concatenate(y_list)
 
         probs = self.model.predict_proba(X_val)
-
-        # Convert probabilities to logits
         eps = 1e-9
         probs_clamped = np.clip(probs, eps, 1 - eps)
         log_probs = np.log(probs_clamped)
@@ -135,7 +141,18 @@ class SklearnModelWrapper(BaseModelWrapper):
         self.temperature_scaler.set_temperature(logits_tensor, labels_tensor)
 
 
-# Wrapper for LightGBM models, inherits from SklearnModelWrapper
+# Wrapper for LightGBM models
 class LightGBMModelWrapper(SklearnModelWrapper):
     # No additional functionality required for now
     pass
+
+
+# Wrapper for XGBoost models
+class XGBoostModelWrapper(SklearnModelWrapper):
+    def __init__(self, model, device, n_classes):
+        super().__init__(model, device, n_classes)
+        # XGBoost uses 'num_class' parameter instead of 'n_classes'
+        if hasattr(self.model, 'set_params'):
+            self.model.set_params(num_class=n_classes)
+        else:
+            raise AttributeError("The provided XGBoost model does not have a 'set_params' method.")

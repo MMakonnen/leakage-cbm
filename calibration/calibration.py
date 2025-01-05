@@ -2,25 +2,36 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-# Module for temperature scaling, used to calibrate model confidence
+# Module for temperature scaling, calibrating model confidence
 class TemperatureScaler(nn.Module):
     def __init__(self):
+        """
+        Initialize the TemperatureScaler module.
+
+        - The module contains a learnable parameter `temperature`, initialized to 1.0.
+        """
         super(TemperatureScaler, self).__init__()
-        # Learnable parameter for temperature scaling, initialized to 1.0
-        self.temperature = nn.Parameter(torch.ones(1) * 1.0)
-    
+        self.temperature = nn.Parameter(torch.ones(1) * 1.0)  # Learnable temperature parameter
+
     def forward(self, logits):
-        # Scale the logits by dividing them by the temperature
+        """
+        Scale logits by dividing by the temperature.
+
+        Parameters:
+        - logits: Tensor of raw outputs from the model.
+
+        Returns:
+        - Scaled logits.
+        """
         return logits / self.temperature
 
     def set_temperature(self, logits, labels):
         """
-        Optimize the temperature parameter to minimize the negative log-likelihood (NLL)
-        between scaled logits and ground truth labels.
-        
+        Optimize the temperature parameter to minimize negative log-likelihood (NLL).
+
         Parameters:
-        - logits: Model's raw outputs (before softmax).
-        - labels: Ground truth labels for the inputs.
+        - logits: Model outputs (before softmax).
+        - labels: Ground truth labels.
         """
         nll_criterion = nn.CrossEntropyLoss()  # Loss function for classification
         optimizer = optim.LBFGS([self.temperature], lr=0.01, max_iter=50)
@@ -29,12 +40,11 @@ class TemperatureScaler(nn.Module):
         logits = logits.detach()
         labels = labels.detach()
         
-        # Closure function optimizer
+        # Closure function for LBFGS optimization
         def eval():
             optimizer.zero_grad()  # Clear gradients
             loss = nll_criterion(logits / self.temperature, labels)  # Compute NLL with scaled logits
             loss.backward()  # Backpropagate to compute gradients
             return loss
 
-        # Optimize the temperature parameter
-        optimizer.step(eval)
+        optimizer.step(eval)  # Optimize temperature parameter
