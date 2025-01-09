@@ -4,11 +4,9 @@
 # - double check in plots of autoreg and embedding are even trained joined, correct these in the plots !!!
 
 
-
 # - fix heatmap to be just squares for different values
 # - move visualiuations to other folder
 # run final simulations with better par: pick 100 or 50 or 200
-
 
 
 # - once fixed saving store final simulation results and use those for analysis indep of what happens ...
