@@ -1,3 +1,33 @@
+
+
+# - autoregressive model not trained joined hence that is not entered properly and hence is also an issue with the visualizations
+# - double check in plots of autoreg and embedding are even trained joined, correct these in the plots !!!
+
+
+
+# - fix heatmap to be just squares for different values
+# - move visualiuations to other folder
+# run final simulations with better par: pick 100 or 50 or 200
+
+
+
+# - once fixed saving store final simulation results and use those for analysis indep of what happens ...
+# - crucially talk about how results tends to be relatively sensitive to parameters ... -> hence this requires furhter investigation
+# - save file properly
+# - write about this concisely and sicuss that probably requites more engineering and look int ofurther, more engineering at this very moment
+# -> for example tuning default aplha seems to make big diff
+# -> do more ablations usw for parameters (e.g. num, num par, ...)
+# - split files in here up properly !!!
+# - MAKE CLEAR THAT TOOK SIGNIFICANT CHUNK OF CODE FROM THE SCBM REPO
+
+# FIX: num sim runs, maybe n, think about parameters overall without violating constraints, improve visualizations, 
+# ensure no train sets that dont contain a class else skip to next, how can this happen, improve data gen seems weird with the
+# amopunt of observations, does this have somethign todo with batching???
+# reserach some more 
+
+
+
+
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='xgboost')
 
@@ -13,11 +43,17 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+import os
+from datetime import datetime
+
 from data.synthetic_data_gen import generate_synthetic_data_leakage
 
+# =========================================================
+# NOTE: Significant portions of this code were adapted from the SCBM repository ...
+# =========================================================
 
 # =========================================================
-#            FREEZE / UNFREEZE UTILS
+# FREEZE / UNFREEZE UTILS
 # =========================================================
 
 def freeze_module(m):
@@ -31,7 +67,7 @@ def unfreeze_module(m):
         param.requires_grad = True
 
 # =========================================================
-#                CBM IMPLEMENTATION
+# CBM IMPLEMENTATION
 # =========================================================
 
 class FCNNEncoder(nn.Module):
@@ -46,7 +82,7 @@ class FCNNEncoder(nn.Module):
             [nn.Linear(num_hidden, num_hidden) for _ in range(num_deep)]
         )
         self.bns = nn.ModuleList([nn.BatchNorm1d(num_hidden) for _ in range(num_deep)])
-        self.dp = nn.Dropout(0.05)
+        self.dp = nn.Dropout(0.3)  # Increased dropout rate for better regularization
 
     def forward(self, x):
         z = self.bn0(self.dp(F.relu(self.fc0(x))))
@@ -165,9 +201,9 @@ class CBM(nn.Module):
         """
         Forward pass of CBM.
         Returns:
-            c_prob: Predicted concept probabilities
-            y_pred_logits: Predicted logits for target classes
-            c: Processed concepts (binary or embeddings)
+        c_prob: Predicted concept probabilities
+        y_pred_logits: Predicted logits for target classes
+        c: Processed concepts (binary or embeddings)
         """
         # Encode features
         intermediate = self.encoder(x)  # (B, hidden_dim=256)
@@ -226,7 +262,7 @@ class CBM(nn.Module):
 
                 # Concatenate all concept probabilities and hard samples
                 c_prob = torch.cat(c_prob_list, dim=1)  # (B, k, MCMC)
-                c = torch.cat(c_hard_list, dim=1)        # (B, k, MCMC)
+                c = torch.cat(c_hard_list, dim=1)  # (B, k, MCMC)
             else:
                 # During training, use probabilities directly
                 c_prob = self.act_c(torch.randn(x.size(0), self.num_concepts, device=x.device))
@@ -241,9 +277,9 @@ class CBM(nn.Module):
                 prob_i = self.scoring_function(torch.cat((c_p[i], c_n[i]), dim=1))  # (B,1)
                 z_i = prob_i * c_p[i] + (1 - prob_i) * c_n[i]  # (B, embedding_size)
                 c_prob_list.append(prob_i)  # List of (B,1)
-                z_list.append(z_i)          # List of (B, embedding_size)
+                z_list.append(z_i)  # List of (B, embedding_size)
             c_prob = torch.cat(c_prob_list, dim=1)  # (B, k)
-            c = torch.cat(z_list, dim=1)           # (B, k*embedding_size)
+            c = torch.cat(z_list, dim=1)  # (B, k*embedding_size)
 
         else:
             raise NotImplementedError(f"Unknown concept_learning={self.concept_learning}.")
@@ -254,20 +290,20 @@ class CBM(nn.Module):
             if c_prob.dim() == 3:
                 c_input = c_prob.mean(dim=-1)  # (B, k)
             else:
-                c_input = c_prob                # (B, k)
+                c_input = c_prob  # (B, k)
         elif self.concept_learning == "autoregressive" and validation:
             if c_prob.dim() == 3:
                 c_input = c_prob.mean(dim=-1)  # (B, k)
             else:
-                c_input = c_prob                # (B, k)
+                c_input = c_prob  # (B, k)
         else:
             if c_prob.dim() == 3:
                 c_input = c_prob.mean(dim=-1)  # (B, k)
             else:
                 if self.concept_learning in ("hard", "soft"):
-                    c_input = c_prob            # (B, k)
+                    c_input = c_prob  # (B, k)
                 else:
-                    c_input = c                # (B, k*embedding_size)
+                    c_input = c  # (B, k*embedding_size)
 
         # Predict target
         y_pred_logits = self.head(c_input)  # (B, J)
@@ -275,14 +311,14 @@ class CBM(nn.Module):
         return c_prob, y_pred_logits, c
 
 # =========================================================
-#            LOSS FUNCTION
+# LOSS FUNCTION
 # =========================================================
 
 class CBLoss(nn.Module):
     """
     Combined loss for CBMs:
-        - Concept Loss: Binary Cross-Entropy for each concept.
-        - Target Loss: Binary Cross-Entropy or Cross-Entropy for target prediction.
+    - Concept Loss: Binary Cross-Entropy for each concept.
+    - Target Loss: Binary Cross-Entropy or Cross-Entropy for target prediction.
     """
     def __init__(self, num_classes=2, reduction="mean", alpha=1.0):
         super().__init__()
@@ -294,9 +330,9 @@ class CBLoss(nn.Module):
         """
         Args:
             c_pred_probs: (B, k) or (B, k, MCMC)
-            c_true:       (B, k)
-            y_logits:     (B, num_classes) or (B,1)
-            y_true:       (B,) with 0-based class labels
+            c_true: (B, k)
+            y_logits: (B, num_classes) or (B,1)
+            y_true: (B,) with 0-based class labels
         Returns:
             target_loss, concept_loss, total_loss
         """
@@ -335,7 +371,7 @@ class CBLoss(nn.Module):
         return target_loss, concept_loss, total_loss
 
 # =========================================================
-#            DATASET CLASS
+# DATASET CLASS
 # =========================================================
 
 class CBMDataset(Dataset):
@@ -355,11 +391,11 @@ class CBMDataset(Dataset):
         return {
             "features": self.X[idx],
             "concepts": self.c[idx],
-            "labels":   self.y[idx],
+            "labels": self.y[idx],
         }
 
 # =========================================================
-#            TRAINING FUNCTION
+# TRAINING FUNCTION
 # =========================================================
 
 def train_cbm(
@@ -375,6 +411,11 @@ def train_cbm(
     epochs=10,
     device="cpu",
     alpha=1.0,
+    batch_size=64,
+    learning_rate=1e-3,
+    num_monte_carlo=5,
+    straight_through=True,
+    embedding_size=64,
 ):
     """
     Train the CBM based on the specified configuration.
@@ -387,20 +428,26 @@ def train_cbm(
         epochs: Number of training epochs.
         device: Device to train on ("cpu" or "cuda").
         alpha: Weighting factor for concept loss.
+        batch_size: Number of samples per batch.
+        learning_rate: Learning rate for optimizer.
+        num_monte_carlo: Number of Monte Carlo samples (for autoregressive).
+        straight_through: Whether to use Straight-Through Estimator.
+        embedding_size: Size of embeddings (for "embedding" CBM).
     Returns:
         model: Trained CBM model.
         warning_occurred: Boolean indicating if any gradient warnings occurred.
     """
     try:
-        batch_size = 64
-        lr = 1e-3
-
+        # Initialize model with hyperparameters
         model = CBM(
             num_covariates=X_train.shape[1],
             num_concepts=c_train.shape[1],
             num_classes=num_classes,
             concept_learning=concept_learning,
-            training_mode=training_mode
+            training_mode=training_mode,
+            num_monte_carlo=num_monte_carlo,
+            straight_through=straight_through,
+            embedding_size=embedding_size
         ).to(device)
 
         # Ensure all parameters require gradients initially
@@ -408,7 +455,7 @@ def train_cbm(
             param.requires_grad = True
 
         criterion = CBLoss(num_classes=num_classes, alpha=alpha)
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)  # Added weight_decay for regularization
 
         train_loader = DataLoader(
             CBMDataset(X_train, c_train, y_train),
@@ -421,6 +468,11 @@ def train_cbm(
             shuffle=False
         )
 
+        # Initialize lists to store loss values for visualization
+        train_total_losses = []
+        val_total_losses = []
+
+        # Initialize a flag to track warnings
         warning_occurred = False  # Flag to track warnings
 
         if training_mode == "independent":
@@ -485,6 +537,8 @@ def train_cbm(
                         concept_loss *= alpha
                         val_losses.append(concept_loss.item())
                 val_loss_avg = np.mean(val_losses)
+                train_total_losses.append(concept_loss.item())
+                val_total_losses.append(val_loss_avg)
                 print(f"Phase 1 - Epoch {ep+1}/{epochs}, val_concept_loss={val_loss_avg:.4f}")
 
             # Phase 2: Train Label Predictor Only
@@ -505,7 +559,7 @@ def train_cbm(
                 raise NotImplementedError(f"Unknown concept_learning={concept_learning}.")
 
             # Modify optimizer to only update label head parameters
-            optimizer = torch.optim.Adam(model.head.parameters(), lr=lr)
+            optimizer = torch.optim.Adam(model.head.parameters(), lr=learning_rate, weight_decay=1e-5)
 
             for ep in range(epochs):
                 model.train()
@@ -558,6 +612,8 @@ def train_cbm(
                             target_loss = F.cross_entropy(y_logits, y_b.long(), reduction='mean')
                         val_losses.append(target_loss.item())
                 val_loss_avg = np.mean(val_losses)
+                train_total_losses.append(target_loss.item())
+                val_total_losses.append(val_loss_avg)
                 print(f"Phase 2 - Epoch {ep+1}/{epochs}, val_label_loss={val_loss_avg:.4f}")
 
             return model, warning_occurred
@@ -604,6 +660,8 @@ def train_cbm(
                 val_target_avg = np.mean(val_target_losses)
                 val_concept_avg = np.mean(val_concept_losses)
                 val_total_avg = np.mean(val_total_losses)
+                train_total_losses.append(total_loss.item())
+                val_total_losses.append(val_total_avg)
                 print(f"Epoch {ep+1}/{epochs} - val_target_loss={val_target_avg:.4f}, val_concept_loss={val_concept_avg:.4f}, val_total_loss={val_total_avg:.4f}")
 
             return model, warning_occurred
@@ -672,6 +730,8 @@ def train_cbm(
                         concept_loss *= alpha
                         val_losses.append(concept_loss.item())
                 val_loss_avg = np.mean(val_losses)
+                train_total_losses.append(concept_loss.item())
+                val_total_losses.append(val_loss_avg)
                 print(f"Phase 1 - Epoch {ep+1}/{epochs}, val_concept_loss={val_loss_avg:.4f}")
 
             # Phase 2: Train Label Predictor Only
@@ -692,7 +752,7 @@ def train_cbm(
                 raise NotImplementedError(f"Unknown concept_learning={concept_learning}.")
 
             # Modify optimizer to only update label head parameters
-            optimizer = torch.optim.Adam(model.head.parameters(), lr=lr)
+            optimizer = torch.optim.Adam(model.head.parameters(), lr=learning_rate, weight_decay=1e-5)
 
             for ep in range(epochs):
                 model.train()
@@ -745,6 +805,8 @@ def train_cbm(
                             target_loss = F.cross_entropy(y_logits, y_b.long(), reduction='mean')
                         val_losses.append(target_loss.item())
                 val_loss_avg = np.mean(val_losses)
+                train_total_losses.append(target_loss.item())
+                val_total_losses.append(val_loss_avg)
                 print(f"Phase 2 - Epoch {ep+1}/{epochs}, val_label_loss={val_loss_avg:.4f}")
 
             return model, warning_occurred
@@ -757,7 +819,7 @@ def train_cbm(
         return None, False
 
 # =========================================================
-#            LEAKAGE ESTIMATION FUNCTIONS
+# LEAKAGE ESTIMATION FUNCTIONS
 # =========================================================
 
 def get_cbm_concepts(model, X, c, y, device="cpu"):
@@ -787,7 +849,7 @@ def get_cbm_concepts(model, X, c, y, device="cpu"):
             all_c_hat.append(c_prob.cpu().numpy())
     return np.concatenate(all_c_hat, axis=0)
 
-def train_xgb_and_get_nll(X_train, y_train, X_val, y_val, X_test, y_test, num_classes, seed):
+def train_xgb_and_get_nll(X_train, y_train, X_val, y_val, X_test, y_test, num_classes, seed, learning_rate=1e-3, num_rounds=100):
     """
     Train XGBoost on given data and compute Negative Log-Likelihood (NLL) on test set.
     Args:
@@ -796,6 +858,8 @@ def train_xgb_and_get_nll(X_train, y_train, X_val, y_val, X_test, y_test, num_cl
         X_test, y_test: Test data.
         num_classes: Number of classes.
         seed: Random seed for reproducibility.
+        learning_rate: Learning rate for XGBoost.
+        num_rounds: Number of boosting rounds.
     Returns:
         nll_test: Negative log-likelihood on test set.
     """
@@ -803,9 +867,11 @@ def train_xgb_and_get_nll(X_train, y_train, X_val, y_val, X_test, y_test, num_cl
         eval_metric="mlogloss",
         num_class=num_classes,
         use_label_encoder=False,
-        random_state=seed
+        random_state=seed,
+        learning_rate=learning_rate,
+        n_estimators=num_rounds
     )
-    
+
     # Check if all classes are present in y_train
     unique_classes = np.unique(y_train)
     expected_classes = np.arange(num_classes)
@@ -839,6 +905,11 @@ def estimate_leakage_with_xgb(
     seed=42,
     epochs=5,
     alpha=1.0,
+    batch_size=64,
+    learning_rate=1e-3,
+    num_monte_carlo=5,
+    straight_through=True,
+    embedding_size=64,
     config_id=1,
     total_configs=10,
 ):
@@ -853,6 +924,11 @@ def estimate_leakage_with_xgb(
         seed: Random seed.
         epochs: Number of training epochs.
         alpha: Weighting factor for concept loss.
+        batch_size: Number of samples per batch.
+        learning_rate: Learning rate for optimizer.
+        num_monte_carlo: Number of Monte Carlo samples (for autoregressive).
+        straight_through: Whether to use Straight-Through Estimator.
+        embedding_size: Size of embeddings (for "embedding" CBM).
         config_id: Current configuration ID (for logging).
         total_configs: Total number of configurations (for logging).
     Returns:
@@ -901,7 +977,12 @@ def estimate_leakage_with_xgb(
             training_mode=training_mode,
             epochs=epochs,
             device=device,
-            alpha=alpha
+            alpha=alpha,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            num_monte_carlo=num_monte_carlo,
+            straight_through=straight_through,
+            embedding_size=embedding_size
         )
 
         if cbm_model is None:
@@ -925,7 +1006,9 @@ def estimate_leakage_with_xgb(
             X_test=c_test,
             y_test=y_test,
             num_classes=J,
-            seed=sim_seed
+            seed=sim_seed,
+            learning_rate=learning_rate,
+            num_rounds=100
         )
 
         # 6) Train XGBoost on [c_hat, c] => NLL_ga
@@ -941,7 +1024,9 @@ def estimate_leakage_with_xgb(
             X_test=X_test_ga,
             y_test=y_test,
             num_classes=J,
-            seed=sim_seed
+            seed=sim_seed,
+            learning_rate=learning_rate,
+            num_rounds=100
         )
 
         leakage = nll_gb - nll_ga
@@ -952,13 +1037,13 @@ def estimate_leakage_with_xgb(
     return all_leakage, all_warnings
 
 # =========================================================
-#                  EXPERIMENT FUNCTION
+# EXPERIMENT FUNCTION
 # =========================================================
 
 def run_experiments(
     configurations,
     concept_range,
-    lambda_range=None,  # List of lambda values for "joint" training mode
+    alpha_range=None,  # List of alpha values for "joint" training mode
     training_modes=None,  # List of training modes
     num_sim=3,
     n=1000,
@@ -966,26 +1051,36 @@ def run_experiments(
     J=5,
     b=200,
     l=0,
-    noise_level=None,
+    noise_level=None,  # Not directly used; placeholder for future enhancements
     central_seed=42,
     epochs=5,
-    alpha=1.0,
-    device="cpu"
+    alpha_default=1.0,
+    device="cpu",
+    batch_size=64,
+    learning_rate=1e-3,
+    num_monte_carlo=5,
+    straight_through=True,
+    embedding_size=64,
 ):
     """
     Run experiments based on specified configurations and collect leakage estimates.
     Args:
         configurations: List of CBM types (e.g., ["soft", "hard", "autoregressive", "embedding"]).
         concept_range: List of k values (number of concepts) to experiment with.
-        lambda_range: List of lambda (alpha) values to test for "joint" training mode (only for 'soft' CBM).
+        alpha_range: List of alpha values to test for "joint" training mode.
         training_modes: List of training modes (e.g., ["joint", "sequential", "independent"]).
         num_sim: Number of simulation runs per configuration.
         n, d, J, b, l: Data generation parameters.
         noise_level: Not directly used; placeholder for future enhancements.
         central_seed: Central seed for reproducibility.
         epochs: Number of training epochs for CBM.
-        alpha: Default weighting factor for concept loss.
+        alpha_default: Default weighting factor for concept loss.
         device: "cpu" or "cuda".
+        batch_size: Number of samples per batch.
+        learning_rate: Learning rate for optimizer.
+        num_monte_carlo: Number of Monte Carlo samples (for autoregressive).
+        straight_through: Whether to use Straight-Through Estimator.
+        embedding_size: Size of embeddings (for "embedding" CBM).
     Returns:
         leakage_df: pandas DataFrame containing leakage results for all runs.
     """
@@ -1005,17 +1100,13 @@ def run_experiments(
         else:
             applicable_training_modes = ["joint"]  # Only joint mode
 
-        for training_mode in applicable_training_modes:
-            # Determine if current configuration requires varying lambda
-            if cbm_type == "soft" and training_mode == "joint":
-                if lambda_range is not None:
-                    current_lambda_range = lambda_range
-                else:
-                    current_lambda_range = [alpha]
-            else:
-                current_lambda_range = [alpha]
+        if cbm_type == "soft" and alpha_range is not None:
+            current_alpha_values = alpha_range
+        else:
+            current_alpha_values = [alpha_default]
 
-            for lam in current_lambda_range:
+        for training_mode in applicable_training_modes:
+            for alpha_val in current_alpha_values:
                 for k in concept_range:
                     total_configs += 1
 
@@ -1029,30 +1120,27 @@ def run_experiments(
         else:
             applicable_training_modes = ["joint"]  # Only joint mode
 
+        # Determine alpha values
+        if cbm_type == "soft" and alpha_range is not None:
+            current_alpha_values = alpha_range
+        else:
+            current_alpha_values = [alpha_default]
+
         # Iterate over each training mode
         for training_mode in applicable_training_modes:
-            # Determine lambda values
-            if cbm_type == "soft" and training_mode == "joint":
-                if lambda_range is not None:
-                    current_lambda_range = lambda_range
-                else:
-                    current_lambda_range = [alpha]
-            else:
-                current_lambda_range = [alpha]
-
-            # Iterate over each lambda value
-            for lam in current_lambda_range:
+            # Iterate over each alpha value
+            for alpha_val in current_alpha_values:
                 # Iterate over each concept value
                 for k in concept_range:
                     # Check if k exceeds projection limits
                     if k > b or k > (d - b - l):
-                        print(f"\n=== Skipping Configuration {config_counter}/{total_configs}: CBM Type='{cbm_type}', Training Mode='{training_mode}', Lambda={'N/A' if not (cbm_type == 'soft' and training_mode == 'joint') else lam}, k={k} ===")
+                        print(f"\n=== Skipping Configuration {config_counter}/{total_configs}: CBM Type='{cbm_type}', Training Mode='{training_mode}', Alpha={'N/A' if not (cbm_type == 'soft' and training_mode == 'joint') else alpha_val}, k={k} ===")
                         print(f"Reason: k={k} exceeds projection limits (k <= {min(b, d - b - l)}).")
                         # Log the skipped configuration
                         results.append({
                             'CBM_Type': cbm_type,
                             'Training_Mode': training_mode,
-                            'Lambda': lam if (cbm_type == "soft" and training_mode == "joint") else np.nan,
+                            'Alpha': alpha_val if (cbm_type == "soft" and training_mode == "joint") else np.nan,
                             'k': k,
                             'Run': np.nan,
                             'Leakage': np.nan,
@@ -1064,15 +1152,13 @@ def run_experiments(
                         config_counter += 1
                         continue  # Skip to next configuration
 
-                    # Determine if current configuration requires varying lambda
+                    # Determine display value for alpha
                     if cbm_type == "soft" and training_mode == "joint":
-                        current_alpha = lam
-                        lambda_display = lam
+                        alpha_display = alpha_val
                     else:
-                        current_alpha = alpha  # Fixed alpha for other configurations
-                        lambda_display = "N/A"
+                        alpha_display = "N/A"
 
-                    print(f"\n=== Running Configuration {config_counter}/{total_configs}: CBM Type='{cbm_type}', Training Mode='{training_mode}', Lambda={lambda_display}, k={k} ===")
+                    print(f"\n=== Running Configuration {config_counter}/{total_configs}: CBM Type='{cbm_type}', Training Mode='{training_mode}', Alpha={alpha_display}, k={k} ===")
 
                     # Run simulations
                     leakages, warnings = estimate_leakage_with_xgb(
@@ -1088,7 +1174,12 @@ def run_experiments(
                         device=device,
                         seed=central_seed,  # Central seed
                         epochs=epochs,
-                        alpha=current_alpha,  # Assign lambda or fixed alpha
+                        alpha=alpha_val,  # Assign current alpha value
+                        batch_size=batch_size,
+                        learning_rate=learning_rate,
+                        num_monte_carlo=num_monte_carlo,
+                        straight_through=straight_through,
+                        embedding_size=embedding_size,
                         config_id=config_counter,
                         total_configs=total_configs
                     )
@@ -1098,7 +1189,7 @@ def run_experiments(
                         results.append({
                             'CBM_Type': cbm_type,
                             'Training_Mode': training_mode,
-                            'Lambda': lam if (cbm_type == "soft" and training_mode == "joint") else np.nan,
+                            'Alpha': alpha_val if (cbm_type == "soft" and training_mode == "joint") else np.nan,
                             'k': k,
                             'Run': run_idx,
                             'Leakage': leakage,
@@ -1115,39 +1206,44 @@ def run_experiments(
     return leakage_df
 
 # =========================================================
-#                  MAIN FUNCTION
+# MAIN FUNCTION
 # =========================================================
 
-if __name__ == "__main__":
+def main():
     # =====================================================
-    #          HYPERPARAMETER CONFIGURATION
+    # HYPERPARAMETER CONFIGURATION
     # =====================================================
     # Number of simulation runs per configuration
-    num_sim = 10  # Specify desired number of simulation runs here
+    num_sim = 15  # Specify desired number of simulation runs here
 
     # Data generation parameters
-    n = 1000        # Number of observations
-    d = 500         # Feature dimensionality
-    J = 5           # Number of target classes
-    b = 200         # Number of features used in ground truth concepts
-    l = 0           # Number of features excluded from leakage
+    n = 2000  # Number of observations
+    d = 700  # Feature dimensionality
+    J = 5  # Number of target classes
+    b = 250  # Number of features used in ground truth concepts
+    l = 0  # Number of features excluded from leakage
 
     # CBM training parameters
-    epochs = 5      # Number of training epochs for CBM
-    alpha = 1.0     # Default weighting factor for concept loss
+    epochs = 5  # Number of training epochs for CBM
+    alpha_default = 200  # Default weighting factor for concept loss
+    batch_size = 64  # Number of samples per batch
+    learning_rate = 1e-3  # Learning rate for optimizer
+    num_monte_carlo = 10  # Number of Monte Carlo samples (for autoregressive)
+    straight_through = True  # Whether to use Straight-Through Estimator
+    embedding_size = 64  # Size of embeddings (for "embedding" CBM)
 
     # Device configuration
-    device = "cpu"   # Set to "cuda" if GPU is available and desired
+    device = "cpu"  # Set to "cuda" if GPU is available and desired
 
     # Random seed for reproducibility
     central_seed = 42
 
     # Define experimental configurations (CBM Types)
     configurations = [
-        'soft',           # Joint Soft CBM with varying lambda
-        'hard',           # Joint Hard CBM with varying lambda
-        'autoregressive', # Autoregressive CBM
-        'embedding'       # Concept Embedding Model
+        'soft',  # Joint Soft CBM with varying alpha
+        'hard',  # Joint Hard CBM with varying alpha
+        'autoregressive',  # Autoregressive CBM
+        'embedding'  # Concept Embedding Model
     ]
 
     # Define training modes
@@ -1160,16 +1256,16 @@ if __name__ == "__main__":
     # Define range of concept values (k) to experiment with
     concept_range = [10, 20, 50, 100, 200]  # Desired k values
 
-    # Define range of lambda values for "joint" soft training mode
-    lambda_range = np.linspace(0.0, 1.0, 10).tolist()  # 10 values from 0.0 to 1.0
+    # Define range of alpha values for "joint" training mode
+    alpha_range = [1, 10, 20, 50, 100, 200]
 
     # =====================================================
-    #               RUN EXPERIMENTS
+    # RUN EXPERIMENTS
     # =====================================================
     leakage_results = run_experiments(
         configurations=configurations,
         concept_range=concept_range,
-        lambda_range=lambda_range,
+        alpha_range=alpha_range,  # Passing the range of alpha values
         training_modes=training_modes,
         num_sim=num_sim,
         n=n,
@@ -1180,90 +1276,135 @@ if __name__ == "__main__":
         noise_level=None,  # Placeholder if needed
         central_seed=central_seed,
         epochs=epochs,
-        alpha=alpha,
-        device=device
+        alpha_default=alpha_default,
+        device=device,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        num_monte_carlo=num_monte_carlo,
+        straight_through=straight_through,
+        embedding_size=embedding_size
     )
 
     # =====================================================
-    #                DISPLAY RESULTS
+    # SAVE RESULTS TO CSV WITH TIMESTAMP
     # =====================================================
-    print("\n=== Leakage Results ===")
-    print(leakage_results)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    results_dir = "simulation_results/res_leak_concept_methods/"
+    os.makedirs(results_dir, exist_ok=True)  # Create directory if it doesn't exist
 
-    # =====================================================
-    #          COMPUTE MEAN LEAKAGE PER CONFIGURATION
-    # =====================================================
-    mean_leakage = leakage_results.groupby(['CBM_Type', 'Training_Mode', 'Lambda', 'k', 'num_sim', 'n', 'd'])['Leakage'].mean().reset_index()
+    results_path = f"{results_dir}res_leak_concept_methods_{timestamp}.csv"
+    leakage_results.to_csv(results_path, index=False)
+    print(f"\nFinal results saved to: {results_path}")
 
-    print("\n=== Mean Leakage per Configuration ===")
-    print(mean_leakage)
 
-    # =====================================================
-    #            IDENTIFY CONFIGURATIONS WITH WARNINGS
-    # =====================================================
-    problematic_configs = leakage_results[leakage_results['Warning'] == True]
-    print("\n=== Configurations with Gradient Warnings or Skipped ===")
-    if not problematic_configs.empty:
-        print(problematic_configs)
-    else:
-        print("No configurations triggered gradient warnings or were skipped.")
+    # Compute mean leakage per configuration
+    # =================== Modification Below ====================
+    mean_leakage = leakage_results.groupby(
+        ['CBM_Type', 'Training_Mode', 'Alpha', 'k', 'num_sim', 'n', 'd'],
+        dropna=False  # Include groups with NaN Alpha
+    )['Leakage'].mean().reset_index()
+    # ================================================================
 
-    # =====================================================
-    #            VISUALIZE RESULTS
-    # =====================================================
-    # 1. Leakage vs. Lambda for Joint Soft CBM across different k values
-    joint_soft_configs = mean_leakage[
-        (mean_leakage['CBM_Type'] == 'soft') &
-        (mean_leakage['Training_Mode'] == 'joint')
-    ]
+    # Save mean leakage to CSV
+    mean_leakage_path = f"{results_dir}res_leak_concept_methods_mean_{timestamp}.csv"
+    mean_leakage.to_csv(mean_leakage_path, index=False)
+    print(f"Mean leakage results saved to: {mean_leakage_path}")
 
-    if not joint_soft_configs.empty:
-        plt.figure(figsize=(12, 6))
-        sns.lineplot(data=joint_soft_configs, x='Lambda', y='Leakage', hue='k', marker='o')
-        plt.title('Leakage vs Lambda for Joint Soft CBM across Different k Values')
-        plt.xlabel('Lambda (α)')
-        plt.ylabel('Leakage (NLL_gb - NLL_ga)')
-        plt.legend(title='k (Number of Concepts)')
-        plt.tight_layout()
-        plt.show()
-    else:
-        print("\nNo data available for Joint Soft CBM configurations to plot 'Leakage vs Lambda'.")
+    # # =====================================================
+    # # DISPLAY RESULTS
+    # # =====================================================
+    # print("\n=== Leakage Results ===")
+    # print(leakage_results)
 
-    # 2. Leakage across All Configurations for different k values
-    plt.figure(figsize=(16, 8))
-    sns.boxplot(x='CBM_Type', y='Leakage', hue='Training_Mode', data=leakage_results)
-    plt.title('Leakage across CBM Types and Training Modes')
-    plt.xlabel('CBM Type')
-    plt.ylabel('Leakage (NLL_gb - NLL_ga)')
-    plt.legend(title='Training Mode')
-    plt.tight_layout()
-    plt.show()
+    # print("\n=== Mean Leakage per Configuration ===")
+    # print(mean_leakage)
 
-    # 3. Leakage across All Configurations and k values
-    plt.figure(figsize=(16, 8))
-    sns.scatterplot(data=mean_leakage, x='k', y='Leakage', hue='CBM_Type', style='Training_Mode', s=100)
-    plt.title('Leakage across All Configurations and k Values')
-    plt.xlabel('Number of Concepts (k)')
-    plt.ylabel('Leakage (NLL_gb - NLL_ga)')
-    plt.legend(title='CBM Type / Training Mode')
-    plt.tight_layout()
-    plt.show()
+    # # =====================================================
+    # # IDENTIFY CONFIGURATIONS WITH WARNINGS
+    # # =====================================================
+    # problematic_configs = leakage_results[leakage_results['Warning'] == True]
+    # print("\n=== Configurations with Gradient Warnings or Skipped ===")
+    # if not problematic_configs.empty:
+    #     print(problematic_configs)
+    # else:
+    #     print("No configurations triggered gradient warnings or were skipped.")
 
-    # 4. Heatmap of Leakage for Joint Soft CBM
-    if not joint_soft_configs.empty:
-        pivot_table = joint_soft_configs.pivot(index='k', columns='Lambda', values='Leakage')
-        plt.figure(figsize=(12, 8))
-        sns.heatmap(pivot_table, annot=True, fmt=".4f", cmap="viridis")
-        plt.title('Heatmap of Leakage for Joint Soft CBM across Lambda and k')
-        plt.xlabel('Lambda (α)')
-        plt.ylabel('Number of Concepts (k)')
-        plt.tight_layout()
-        plt.show()
+    # # =====================================================
+    # # VISUALIZE RESULTS
+    # # =====================================================
+    # # Note: All plots can now be reproduced from the saved CSV files.
 
-    # =====================================================
-    #            SAVE RESULTS TO CSV (Optional)
-    # =====================================================
-    # Uncomment the following lines to save the results to CSV files.
+    # # 1. Leakage vs. Alpha for Joint Soft CBM across different k values
+    # joint_soft_configs = mean_leakage[
+    #     (mean_leakage['CBM_Type'] == 'soft') &
+    #     (mean_leakage['Training_Mode'] == 'joint')
+    # ]
 
-    # leakage_results.to_csv("leak_res_concept_methods_all.csv", index=False)
-    # mean_leakage.to_csv("leak_res_concept_methods_mean.csv", index=False)
+    # if not joint_soft_configs.empty:
+    #     plt.figure(figsize=(12, 6))
+    #     sns.lineplot(data=joint_soft_configs, x='Alpha', y='Leakage', hue='k', marker='o')
+    #     plt.xscale('log')  # Since alpha is on a log scale
+    #     plt.title('Leakage vs Alpha for Joint Soft CBM across Different k Values')
+    #     plt.xlabel('Alpha (log scale)')
+    #     plt.ylabel('Leakage (NLL_gb - NLL_ga)')
+    #     plt.legend(title='k (Number of Concepts)')
+    #     plt.tight_layout()
+    #     plt.show()
+    # else:
+    #     print("\nNo data available for Joint Soft CBM configurations to plot 'Leakage vs Alpha'.")
+
+    # # 2. Leakage across All Configurations for different k values
+    # plt.figure(figsize=(16, 8))
+    # sns.boxplot(x='CBM_Type', y='Leakage', hue='Training_Mode', data=leakage_results)
+    # plt.title('Leakage across CBM Types and Training Modes')
+    # plt.xlabel('CBM Type')
+    # plt.ylabel('Leakage (NLL_gb - NLL_ga)')
+    # plt.legend(title='Training Mode')
+    # plt.tight_layout()
+    # plt.show()
+
+    # # 3. Leakage across All Configurations and k values
+    # plt.figure(figsize=(16, 8))
+    # sns.scatterplot(data=mean_leakage, x='k', y='Leakage', hue='CBM_Type', style='Training_Mode', s=100)
+    # plt.title('Leakage across All Configurations and k Values')
+    # plt.xlabel('Number of Concepts (k)')
+    # plt.ylabel('Leakage (NLL_gb - NLL_ga)')
+    # plt.legend(title='CBM Type / Training Mode')
+    # plt.tight_layout()
+    # plt.show()
+
+    # # 4. Heatmap of Leakage for Joint Soft CBM
+    # if not joint_soft_configs.empty:
+    #     pivot_table = joint_soft_configs.pivot(index='k', columns='Alpha', values='Leakage')
+    #     plt.figure(figsize=(12, 8))
+    #     sns.heatmap(pivot_table, annot=True, fmt=".4f", cmap="viridis")
+    #     plt.xscale('log')  # Since alpha is on a log scale
+    #     plt.title('Heatmap of Leakage for Joint Soft CBM across Alpha and k')
+    #     plt.xlabel('Alpha (log scale)')
+    #     plt.ylabel('Number of Concepts (k)')
+    #     plt.tight_layout()
+    #     plt.show()
+    # else:
+    #     print("\nNo data available for Joint Soft CBM configurations to plot 'Leakage vs Alpha' Heatmap.")
+
+    # # =====================================================
+    # # FINAL NOTES
+    # # =====================================================
+    # print("\n=== Final Notes ===")
+    # print("All results have been saved with a timestamp in the 'simulation_results/res_leak_concept_methods/' directory.")
+    # print("You can reproduce the plots using the saved CSV files independently.")
+    # print("Leakage estimates are relatively sensitive to parameters such as 'alpha', 'num_sim', and 'num_monte_carlo'.")
+    # print("Further investigation and parameter tuning are recommended to optimize leakage estimates.")
+    # print("Consider conducting more ablation studies on parameters like learning rate, batch size, and model architecture.")
+    # print("Ensure that the training sets contain all classes to avoid skewed results.")
+    # print("Additional engineering efforts may be required to stabilize training and improve leakage estimates.")
+    # print("Remember that significant portions of this code were adapted from the SCBM repository, ensuring proper attribution.")
+
+# =========================================================
+# RUN MAIN FUNCTION
+# =========================================================
+
+if __name__ == "__main__":
+    main()
+
+ 
