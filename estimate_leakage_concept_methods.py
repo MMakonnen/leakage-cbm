@@ -1,31 +1,3 @@
-
-
-# - autoregressive model not trained joined hence that is not entered properly and hence is also an issue with the visualizations
-# - double check in plots of autoreg and embedding are even trained joined, correct these in the plots !!!
-
-
-# - fix heatmap to be just squares for different values
-# - move visualiuations to other folder
-# run final simulations with better par: pick 100 or 50 or 200
-
-
-# - once fixed saving store final simulation results and use those for analysis indep of what happens ...
-# - crucially talk about how results tends to be relatively sensitive to parameters ... -> hence this requires furhter investigation
-# - save file properly
-# - write about this concisely and sicuss that probably requites more engineering and look int ofurther, more engineering at this very moment
-# -> for example tuning default aplha seems to make big diff
-# -> do more ablations usw for parameters (e.g. num, num par, ...)
-# - split files in here up properly !!!
-# - MAKE CLEAR THAT TOOK SIGNIFICANT CHUNK OF CODE FROM THE SCBM REPO
-
-# FIX: num sim runs, maybe n, think about parameters overall without violating constraints, improve visualizations, 
-# ensure no train sets that dont contain a class else skip to next, how can this happen, improve data gen seems weird with the
-# amopunt of observations, does this have somethign todo with batching???
-# reserach some more 
-
-
-
-
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module='xgboost')
 
@@ -46,9 +18,6 @@ from datetime import datetime
 
 from data.synthetic_data_gen import generate_synthetic_data_leakage
 
-# =========================================================
-# NOTE: Significant portions of this code were adapted from the SCBM repository ...
-# =========================================================
 
 # =========================================================
 # FREEZE / UNFREEZE UTILS
@@ -1215,10 +1184,10 @@ def main():
     num_sim = 15  # Specify desired number of simulation runs here
 
     # Data generation parameters
-    n = 2000  # Number of observations
-    d = 700  # Feature dimensionality
+    n = 10000  # Number of observations
+    d = 1000  # Feature dimensionality
     J = 5  # Number of target classes
-    b = 250  # Number of features used in ground truth concepts
+    b = 160  # Number of features used in ground truth concepts
     l = 0  # Number of features excluded from leakage
 
     # CBM training parameters
@@ -1239,23 +1208,23 @@ def main():
     # Define experimental configurations (CBM Types)
     configurations = [
         'soft',  # Joint Soft CBM with varying alpha
-        'hard',  # Joint Hard CBM with varying alpha
-        'autoregressive',  # Autoregressive CBM
-        'embedding'  # Concept Embedding Model
+        # 'hard',  # Joint Hard CBM with varying alpha
+        # 'autoregressive',  # Autoregressive CBM
+        # 'embedding'  # Concept Embedding Model
     ]
 
     # Define training modes
     training_modes = [
         'joint',
-        'sequential',
-        'independent'
+        # 'sequential',
+        # 'independent'
     ]
 
     # Define range of concept values (k) to experiment with
-    concept_range = [10, 20, 50, 100, 200]  # Desired k values
+    concept_range = [25, 50, 75, 100, 125, 150]  # Desired k values
 
     # Define range of alpha values for "joint" training mode
-    alpha_range = [1, 10, 20, 50, 100, 200]
+    alpha_range = [0.01, 0.025, 0.05, 0.075, 0.1, 0.2, 0.3]
 
     # =====================================================
     # RUN EXPERIMENTS
