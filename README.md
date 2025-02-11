@@ -1,13 +1,14 @@
-# Measuring Leakage in Concept-Based Methods
+# Measuring Leakage in Concept-Based Methods: An Information-Theoretic Approach
 
-This repository introduces an information-theoretic metric to quantify leakage in Concept Bottleneck Models (CBMs). It includes the metric's implementation and ongoing tests to validate its effectiveness. Additionally, it features an initial comparison of estimated leakage across various concept-based methods, including classical CBMs (soft and hard configurations, trained sequentially, jointly, and independently), autoregressive CBMs, and embedding-based CBMs. **This is an ongoing research project** at the Medical Data Science Group, ETH Zurich.
+This repository contains the code for the paper _"Measuring Leakage in Concept-Based Methods: An Information-Theoretic Approach."_ The paper introduces an information-theoretic metric to quantify leakage in Concept Bottleneck Models (CBMs). This repository includes the metric's implementation and simulation experiments to validate its effectiveness. Additionally, it provides an initial implementation for comparing the estimated leakage across various concept-based methods, including classical CBMs (soft and hard configurations, trained sequentially, jointly, and independently), autoregressive CBMs, and embedding-based CBMs. Note however that this repository primarily focuses on validating the proposed leakage measure, with an emphasis on soft classical CBMs (joint training setting).
 
-### TL;DR: Theoretical Background
+## TL;DR: Theoretical Background
 
-Concept Bottleneck Models (CBMs) improve interpretability by mapping input features \(x\) to human-understandable concepts \(\hat{c} = h(x)\), which are then used to predict the output \(\hat{y} = g(\hat{c})\). Ideally, \(g\) remains simple to ensure transparency. However, CBMs are prone to **information leakage**, where unintended information beyond the specified concepts influences predictions. This leakage undermines interpretability by allowing predictions to depend on extra, undefined information.
+Concept Bottleneck Models (CBMs) enhance interpretability by mapping input features \(x\) to human-understandable concepts \(\hat{c} = h(x)\), which are then used to predict the output \(\hat{y} = g(\hat{c})\). Ideally, \(g\) should remain simple to ensure transparency. However, CBMs are susceptible to **information leakage**, where unintended information beyond the defined concepts influences predictions. This leakage compromises interpretability by allowing predictions to depend on extra, undefined information.
 
-Quantifying leakage is critical for assessing interpretability violations. This research proposes an **information-theoretic measure** for leakage and validates it using synthetic data with controlled leakage. The CBM is trained on this data to evaluate the measure's reliability, with future plans to extend the study to real-world datasets for further validation.
+Quantifying leakage is crucial for assessing interpretability violations. This research proposes an **information-theoretic measure** for leakage and validates it using synthetic data with controlled leakage. CBMs are trained on this data to evaluate the measure's reliability, with future work aimed at extending the study to real-world datasets.
 
-### CODE
+## Code
 
-The `estimate_leakage_concept_methods.py` script contains the code for validating the proposed leakage measure. Additionally, the `validate_leakage_measure.py` script provides the initial implementation (not yet cleaned up or modularized) for estimating leakage across different concept-based methods.
+- **`estimate_leakage_concept_methods.py`** – Implements the proposed leakage measure and validation experiments.
+- **`validate_leakage_measure.py`** – Provides an initial (non-modularized) implementation for estimating leakage across different concept-based methods.
